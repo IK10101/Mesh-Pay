@@ -1,10 +1,10 @@
 # Mesh UPI Payments
 
-A mesh-routed, offline-capable payment settlement system — a Node.js implementation of the "UPI without internet" concept, built with a stronger distributed-systems foundation : Redis-backed atomic idempotency, JWT-authenticated bridge nodes, per-node rate limiting, and Docker Compose for one-command local setup.
+A mesh-routed, offline-capable payment settlement system built in Node.js, designed around a distributed-systems-first approach: Redis-backed atomic idempotency, JWT-authenticated bridge nodes, per-node rate limiting, and Docker Compose for one-command local setup.
 
 ## The problem this solves
 
-In areas with unreliable internet, a payment still needs a way to travel from sender to server. This project simulates that journey: a payment is encrypted on the sender's device, hops across one or more intermediary "bridge nodes" (devices that relay the payload without ever being able to read it), and is finally decrypted and settled once it reaches a server with real connectivity. The core engineering challenge isn't just encryption — it's making sure a payment that gets delivered by multiple bridge nodes (or replayed by an attacker) settles **exactly once**.
+In areas with unreliable internet, a payment still needs a way to travel from sender to server. This project handles that journey: a payment is encrypted on the sender's device, hops across one or more intermediary "bridge nodes" (devices that relay the payload without ever being able to read it), and is finally decrypted and settled once it reaches a server with real connectivity. The core engineering challenge isn't just encryption — it's making sure a payment that gets delivered by multiple bridge nodes (or replayed by an attacker) settles **exactly once**.
 
 ## Architecture
 
@@ -31,11 +31,11 @@ Bridge nodes physically carry the encrypted payload but structurally cannot read
 
 - **Two independent replay-detection layers:** the Redis check is the fast, primary defense; the database's `nonce @unique` constraint is a backup that catches anything that somehow slips past Redis (e.g., a Redis outage), returning a specific `P2002` error that the API handles gracefully rather than crashing.
 
-- **JWT authentication for bridge nodes:** the original concept's ingest endpoint has no authentication at all. Here, every payment-creation request requires a valid, signed JWT — bridge nodes must first obtain a token (`POST /api/auth/token`), and the server verifies the signature (not just the payload) before accepting any relay.
+- **JWT authentication for bridge nodes:** every payment-creation request requires a valid, signed JWT — bridge nodes must first obtain a token (`POST /api/auth/token`), and the server verifies the signature (not just the payload) before accepting any relay.
 
 - **Per-node rate limiting:** limits are tracked by the bridge node's identity (from its JWT), not by IP address — multiple bridge nodes in a real mesh network could plausibly share a network path, so identity-based limiting is more accurate than IP-based limiting for this use case.
 
-- **Dual storage in Postgres (plaintext + encrypted):** the `Payment` table stores both human-readable fields (for the server's own operational use — status checks, admin views) and the full encrypted package (ciphertext, wrapped key, IV, auth tag) as a tamper-evident record of exactly what was transmitted. This mirrors how a real system would want both operability and an auditable original record.
+- **Dual storage in Postgres (plaintext + encrypted):** the `Payment` table stores both human-readable fields (for the server's own operational use — status checks, admin views) and the full encrypted package (ciphertext, wrapped key, IV, auth tag) as a tamper-evident record of exactly what was transmitted. This gives the system both operability and an auditable original record.
 
 ## Setup
 
@@ -87,7 +87,7 @@ Node.js, Express, PostgreSQL, Prisma ORM (with `@prisma/adapter-pg`), Redis (`io
 
 ## Limitations
 
-- **Double-spend is detected, not prevented, at the offline stage.** If a sender's device is compromised and creates two conflicting offline payments before either reaches the server, this system will settle whichever arrives first and reject the second as a duplicate/conflict — it does not prevent the attempt itself while both parties are offline. This is an acknowledged limitation of the underlying concept, not something unique to this implementation.
+- **Double-spend is detected, not prevented, at the offline stage.** If a sender's device creates two conflicting offline payments before either reaches the server, the system settles whichever arrives first and rejects the second as a duplicate/conflict — it does not prevent the attempt itself while both parties are offline. This is an inherent constraint of any store-and-forward offline payment design, and would require a more advanced consensus mechanism between devices to fully close.
 - **In-memory metrics reset on server restart.** A production version would back the `/metrics` counters with Redis or a dedicated metrics/observability system rather than a plain in-process object.
 - **`amount` is stored as `Float`.** For a real financial system, storing money as a floating-point type risks rounding errors; a production version should use a fixed-precision `Decimal` type or store amounts as integers in the smallest currency unit.
 - **Token issuance has no real authentication step.** `POST /api/auth/token` issues a token to anyone who provides a `nodeId` — a production system would gate this behind actual bridge-node registration/authentication (e.g., a pre-shared certificate or registered device key).
