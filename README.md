@@ -1,4 +1,4 @@
-# Mesh UPI Payments
+# Mesh Pay
 
 A mesh-routed, offline-capable payment settlement system built in Node.js, designed around a distributed-systems-first approach: Redis-backed atomic idempotency, JWT-authenticated bridge nodes, per-node rate limiting, and Docker Compose for one-command local setup.
 
